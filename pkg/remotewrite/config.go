@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/common/config"
+	"github.com/prometheus/common/sigv4"
 	"net/http"
 	"strconv"
 	"strings"
@@ -55,6 +57,8 @@ type Config struct {
 	TrendStats []string `json:"trendStats"`
 
 	StaleMarkers null.Bool `json:"staleMarkers"`
+
+	SigV4Config *sigv4.SigV4Config `json:"sig_v4"`
 }
 
 // NewConfig creates an Output's configuration.
@@ -94,6 +98,12 @@ func (conf Config) RemoteConfig() (*remote.HTTPConfig, error) {
 		for k, v := range conf.Headers {
 			hc.Headers.Add(k, v)
 		}
+	}
+
+	hc.SigV4Config = &sigv4.SigV4Config{
+		Region:    conf.SigV4Config.Region,
+		AccessKey: conf.SigV4Config.AccessKey,
+		SecretKey: conf.SigV4Config.SecretKey,
 	}
 	return &hc, nil
 }
@@ -145,7 +155,7 @@ func (conf Config) Apply(applied Config) Config {
 // GetConsolidatedConfig combines the options' values from the different sources
 // and returns the merged options. The Order of precedence used is documented
 // in the k6 Documentation https://k6.io/docs/using-k6/k6-options/how-to/#order-of-precedence.
-func GetConsolidatedConfig(jsonRawConf json.RawMessage, env map[string]string, url string) (Config, error) {
+func GetConsolidatedConfig(jsonRawConf json.RawMessage, env map[string]string) (Config, error) {
 	result := NewConfig()
 	if jsonRawConf != nil {
 		jsonConf, err := parseJSON(jsonRawConf)
@@ -165,7 +175,6 @@ func GetConsolidatedConfig(jsonRawConf json.RawMessage, env map[string]string, u
 
 	// TODO: define a way for defining Output's options
 	// then support them.
-	//nolint:gocritic
 	//
 	//if url != "" {
 	//urlConf, err := parseArg(url)
@@ -252,6 +261,18 @@ func parseEnvs(env map[string]string) (Config, error) {
 		c.TrendStats = strings.Split(trendStats, ",")
 	}
 
+	if region, regionDefined := env["K6_PROMETHEUS_RW_AWS_REGION"]; regionDefined {
+		c.SigV4Config.Region = region
+	}
+
+	if accessKey, accessKeyDefined := env["K6_PROMETHEUS_RW_AWS_ACCESS_KEY"]; accessKeyDefined {
+		c.SigV4Config.AccessKey = accessKey
+	}
+
+	if secretKey, secretKeyDefined := env["K6_PROMETHEUS_RW_AWS_SECRET_KEY"]; secretKeyDefined {
+		c.SigV4Config.SecretKey = config.Secret(secretKey)
+	}
+
 	return c, nil
 }
 
@@ -297,7 +318,6 @@ func parseArg(text string) (Config, error) {
 		// strvals doesn't support the same format used by --summary-trend-stats
 		// using the comma as the separator, because it is already used for
 		// dividing the keys.
-		//nolint:gocritic
 		//
 		//if v, ok := params["trendStats"].(string); ok && len(v) > 0 {
 		//c.TrendStats = strings.Split(v, ",")

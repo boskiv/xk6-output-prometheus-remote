@@ -38,7 +38,7 @@ type Output struct {
 func New(params output.Params) (*Output, error) {
 	logger := params.Logger.WithFields(logrus.Fields{"output": "Prometheus remote write"})
 
-	config, err := GetConsolidatedConfig(params.JSONConfig, params.Environment, params.ConfigArgument)
+	config, err := GetConsolidatedConfig(params.JSONConfig, params.Environment)
 	if err != nil {
 		return nil, err
 	}
@@ -195,18 +195,19 @@ func (o *Output) flush() {
 	var (
 		start = time.Now()
 		nts   int
+		okMsg = "Successful flushed time series to remote write endpoint"
 	)
 
 	defer func() {
 		d := time.Since(start)
-		okmsg := "Successful flushed time series to remote write endpoint"
+
 		if d > time.Duration(o.config.PushInterval.Duration) {
-			// There is no intermediary storage so warn if writing to remote write endpoint becomes too slow
+			// There is no intermediary storage so warn if writing to remotely write endpoint becomes too slow
 			o.logger.WithField("nts", nts).
 				Warnf("%s but it took %s while flush period is %s. Some samples may be dropped.",
-					okmsg, d.String(), o.config.PushInterval.String())
+					okMsg, d.String(), o.config.PushInterval.String())
 		} else {
-			o.logger.WithField("nts", nts).WithField("took", d).Debug(okmsg)
+			o.logger.WithField("nts", nts).WithField("took", d).Debug(okMsg)
 		}
 	}()
 
@@ -312,7 +313,7 @@ type seriesWithMeasure struct {
 	// TODO: maybe add some caching for the mapping?
 }
 
-// TODO: add unit tests
+// MapPrompb TODO: add unit tests
 func (swm seriesWithMeasure) MapPrompb() []*prompb.TimeSeries {
 	var newts []*prompb.TimeSeries
 
@@ -325,7 +326,6 @@ func (swm seriesWithMeasure) MapPrompb() []*prompb.TimeSeries {
 		}
 	}
 
-	//nolint:forcetypeassert
 	switch swm.Metric.Type {
 	case metrics.Counter:
 		ts := mapMonoSeries(swm.TimeSeries, "total", swm.Latest)

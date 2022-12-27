@@ -12,16 +12,18 @@ import (
 	"time"
 
 	"github.com/golang/snappy"
+	"github.com/prometheus/common/sigv4"
 	prompb "go.buf.build/grpc/go/prometheus/prometheus"
 	"google.golang.org/protobuf/proto"
 )
 
 // HTTPConfig holds the config for the HTTP client.
 type HTTPConfig struct {
-	Timeout   time.Duration
-	TLSConfig *tls.Config
-	BasicAuth *BasicAuth
-	Headers   http.Header
+	Timeout     time.Duration
+	TLSConfig   *tls.Config
+	BasicAuth   *BasicAuth
+	Headers     http.Header
+	SigV4Config *sigv4.SigV4Config
 }
 
 // BasicAuth holds the config for basic authentication.
@@ -59,6 +61,14 @@ func NewWriteClient(endpoint string, cfg *HTTPConfig) (*WriteClient, error) {
 			TLSClientConfig: cfg.TLSConfig,
 		}
 	}
+
+	if cfg.SigV4Config != nil {
+		wc.hc.Transport, err = sigv4.NewSigV4RoundTripper(cfg.SigV4Config, wc.hc.Transport)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return wc, nil
 }
 
